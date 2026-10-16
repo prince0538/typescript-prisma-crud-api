@@ -11,17 +11,26 @@ export const createUser = async (req: Request, res: Response) => {
         .json({ error: "name, email, password and age are required" });
       return;
     }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        error: "Email already exists",
+      })
+    }
     const hashed = await bcrypt.hash(password, 10);
+
     const user = await prisma.user.create({
       data: { name, email, password: hashed, age: Number(age) },
     });
     res.status(201).json(user);
   } catch (error: any) {
-    if (error.code === "P2002") {
-      res.status(409).json({ error: "Email already exists" });
-      return;
-    }
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message 
+    });
   }
 };
 
@@ -30,7 +39,9 @@ export const getUsers = async (_req: Request, res: Response) => {
     const users = await prisma.user.findMany();
     res.json(users);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message
+    });
   }
 };
 
@@ -40,7 +51,9 @@ export const getUser = async (req: Request, res: Response) => {
       where: { id: String(req.params.id) },
     });
     if (!user) {
-      res.status(404).json({ error: "User not found" });
+      res.status(404).json({
+         error: "User not found" 
+   });
       return;
     }
     res.json(user);
@@ -53,39 +66,61 @@ export const getUser = async (req: Request, res: Response) => {
 
 export const updateUser = async (req: Request, res: Response) => {
   try {
+    const id = String(req.params.id);
+    const existingUser = await prisma.user.findUnique({ where: { id } });
+    if (!existingUser) {
+      res.status(404).json({ 
+        error: "User not found"
+       });
+      return;
+    }
+
     const data = { name: req.body.name, email: req.body.email, password: req.body.password, age: req.body.age };
+    if (data.email) {
+      data.email = data.email.toLowerCase();
+      const userWithEmail = await prisma.user.findFirst({
+        where: { email: data.email, id: { not: id } },
+      });
+      if (userWithEmail) {
+        res.status(409).json({ 
+          error: "Email already exists" 
+        });
+        return;
+      }
+    }
     if (data.password) data.password = await bcrypt.hash(data.password, 10);
     if (data.age !== undefined) data.age = Number(data.age);
 
     const user = await prisma.user.update({
-      where: { id: String(req.params.id) },
+      where: { id },
       data,
     });
     res.json(user);
   } catch (error: any) {
-    if (error.code === "P2025") {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-    if (error.code === "P2002") {
-      res.status(409).json({ error: "Email already exists" });
-      return;
-    }
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message 
+    });
   }
 };
 
 export const deleteUser = async (req: Request, res: Response) => {
   try {
-    await prisma.user.delete({ where: { id: String(req.params.id) } });
+    const id = String(req.params.id);
+    const existingUser = await prisma.user.findUnique({ where: { id } });
+    if (!existingUser) {
+      res.status(404).json({ 
+        error: "User not found" 
+      });
+      return;
+    }
+
+    await prisma.user.delete({ where: { id } });
     res.status(200).send({
       message: 'User deleted successfully',
     });
   } catch (error: any) {
-    if (error.code === "P2025") {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message 
+    });
   }
 };
